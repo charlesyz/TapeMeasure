@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">TapeMeasure</string>
+    <string name="title">Magic Ruler</string>
+    <string name="title_measureit">MeasureIt</string>
 </resources>
