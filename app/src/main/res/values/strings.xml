@@ -2,4 +2,5 @@
     <string name="app_name">TapeMeasure</string>
     <string name="title">Magic Ruler</string>
     <string name="title_measureit">MeasureIt</string>
+    <string name="btn_calibrate">Calibrate</string>
 </resources>
