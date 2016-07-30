@@ -19,17 +19,20 @@ import android.widget.TextView;
 
 public class MeasuringTape extends Activity implements SensorEventListener{
 
-    private TextView xText, yText, zText, velocityText, calibrateText;
+    private TextView xText, yText, zText, velocityText, calibrateText, distanceText;
     private Sensor mySensor;
     private SensorManager SM;
     private double yAccel = 0.0;
     private double yAccelOld = 0.0;
     private boolean isUpdated = false;
     private double velocity = 0.0;
+    private double distance = 0.0;
+    private double distanceChange = 0.0;
     private double posDead = -0.1;
     private double negDead = -0.18;
     private double calibrate = 0.0;
     private int timeDiff = 0;
+    private int stopCounter = 0;
     private boolean isOn = false;
 
     private Timer timer;
@@ -45,7 +48,7 @@ public class MeasuringTape extends Activity implements SensorEventListener{
         // Accelerometer Sensor
         mySensor = SM.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
         // Register sensor Listener
-        SM.registerListener(this, mySensor, SensorManager.SENSOR_DELAY_GAME);
+        SM.registerListener(this, mySensor, SensorManager.SENSOR_DELAY_FASTEST);
 
         /*  SENSOR_DELAY_FASTEST 0 microsecond
             SENSOR_DELAY_GAME 20,000 microsecond
@@ -61,6 +64,7 @@ public class MeasuringTape extends Activity implements SensorEventListener{
         zText = (TextView)findViewById(R.id.zText);
         velocityText = (TextView)findViewById(R.id.velocityText);
         calibrateText = (TextView)findViewById(R.id.calibrateText);
+        distanceText = (TextView)findViewById(R.id.distanceText);
 
         // Assigning on/off buttons
         // the "ON" button
@@ -82,11 +86,14 @@ public class MeasuringTape extends Activity implements SensorEventListener{
                 isOn = false;
                 // Reset text and vars
                 timeDiff = 0;
+                stopCounter = 0;
                 velocity = 0.0;
+                distance = 0.0;
                 xText.setText("X");
                 yText.setText("Y");
                 zText.setText("Z");
                 velocityText.setText("Velocity");
+                distanceText.setText("Distance");
             }
         });
 
@@ -97,12 +104,13 @@ public class MeasuringTape extends Activity implements SensorEventListener{
             // timer finds lowest and highest bounds during calibration
             @Override
             public void onClick(View view) {
+
+                isOn = true;
                 // reset
                 posDead = -99.9;
                 negDead = 99.9;
                 CountDownTimer calibrateTimer;
                 calibrateTimer = new CountDownTimer(10000, 1) {
-
                     public void onTick(long millisUntilFinished) {
                         if (yAccel > posDead){
                             posDead = yAccel;
@@ -110,43 +118,70 @@ public class MeasuringTape extends Activity implements SensorEventListener{
                         if (yAccel < negDead){
                             negDead = yAccel;
                         }
-                        calibrateText.setText( String.format("posDead = %.3f\n negDead =  %.3f", posDead, negDead));
+                        calibrateText.setText(String.format("posDead = %.3f\n negDead =  %.3f", posDead, negDead));
                     }
 
                     public void onFinish() {
-                        calibrate = 0 - (posDead + negDead) / 2;
+                        calibrate = 0 - yAccel;
+                        // calibrate = 0 - (posDead + negDead) / 2;
                         calibrateText.setText(String.format("Calibration Completed!\nPosDead = %.3f \nnegDead = %.3f \nCalibrate = %.3f", posDead, negDead, calibrate));
-
+                        isOn = false;
+                        // Reset text and vars
+                        timeDiff = 0;
+                        stopCounter = 0;
+                        velocity = 0.0;
+                        distance = 0.0;
+                        xText.setText("X");
+                        yText.setText("Y");
+                        zText.setText("Z");
+                        velocityText.setText("Velocity");
+                        distanceText.setText("Distance");
                     }
                 }.start();
 
             }
         });
+
+        // reading
+
+
     }
 
 
     @Override
     public void onSensorChanged(SensorEvent sensorEvent) {
+        // set acceleration
+        //yAccelOld = yAccel;
+        yAccel = sensorEvent.values[1];
+
+        isUpdated = true;
+
         if (isOn) {
-            // set acceleration
-            yAccelOld = yAccel;
-            yAccel = sensorEvent.values[1];
-
-            isUpdated = true;
-
-            // check dead zone and calculate velocity.
+            // check dead zone and calculate velocity and distance
             if (yAccel < negDead || yAccel > posDead){
-                velocity += (yAccelOld + calibrate) * ((double) timeDiff / 1000);
+                if (stopCounter > 0){
+                    stopCounter--;
+                }
+
+                distanceChange = velocity * ((double) timeDiff / 1000) + (yAccel * Math.pow(((double) timeDiff / 1000), 2))/ 2;
+                distance += distanceChange;
+                velocity += (yAccel + calibrate) * ((double) timeDiff / 1000);
             }
-            // reset velocity if in deadzone
+            // reset velocity if in deadzone for more than 5 ms
             else{
+                stopCounter++;
+            }
+            if (stopCounter > 5){
+                stopCounter = 0;
                 velocity = 0;
             }
-            xText.setText( String.format("X: %f", sensorEvent.values[0] + calibrate) );
-            yText.setText( String.format("Y: %f", sensorEvent.values[1] + calibrate) );
-            zText.setText( String.format("Z: %f", sensorEvent.values[2] + calibrate) );
-            velocityText.setText( String.format("Velocity: %.5f", velocity) );
+            xText.setText(String.format("X: %f", sensorEvent.values[0] + calibrate));
+            yText.setText(String.format("Y: %f", sensorEvent.values[1] + calibrate));
+            zText.setText(String.format("Z: %f", sensorEvent.values[2] + calibrate));
+            velocityText.setText(String.format("Velocity: %.5f cm/s", velocity * 100));
+            distanceText.setText(String.format("Distance: %.5f cm", distance * 100));
             Log.i(TAG, "TimeDiff: " + timeDiff);
+
             // reset
             timeDiff = 0;
         }
@@ -155,9 +190,9 @@ public class MeasuringTape extends Activity implements SensorEventListener{
     public void startTimerCounter() {
 
         TimerTask_Counter counter = new TimerTask_Counter();
-        //set a new Timer
+        //set a new Timer\\\
         timer = new Timer();
-        timer.schedule(counter, 0, 1); //
+        timer.schedule(counter, 0, 1);
     }
 
     // ever 1 ms checks for change in yAccel and adjust timeDiff
@@ -174,7 +209,6 @@ public class MeasuringTape extends Activity implements SensorEventListener{
             }
         }
     }
-
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int i) {
